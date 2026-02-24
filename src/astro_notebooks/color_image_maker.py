@@ -102,6 +102,7 @@ class ColorImageMaker:
             value=0.5, min=0, max=1, step=0.01,
             description=label,
             style={'description_width': 'initial'},
+            continuous_update=False,
             layout={'width': '100%'},
         )
 
@@ -148,7 +149,7 @@ class ColorImageMaker:
         filename_input = ipw.Text(
             description='Add to filename:',
             value='',
-            placeholder='e.g. _v2',
+            placeholder='e.g. your name',
             style={'description_width': 'initial'},
             layout={'width': '400px'},
         )
@@ -176,7 +177,7 @@ class ColorImageMaker:
 
         def on_save(b):
             suffix = filename_input.value
-            filename = f'full_res_color_{self.object_name}{suffix}.png'
+            filename = f'{self.object_name}-{suffix}-color.png'
 
             # If file exists and we haven't yet confirmed, ask for confirmation
             if os.path.exists(filename) and save_button.button_style != 'danger':
