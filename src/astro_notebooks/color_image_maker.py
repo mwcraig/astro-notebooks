@@ -157,24 +157,40 @@ class ColorImageMaker:
         save_button = ipw.Button(description='Save image', button_style='success')
         save_status_label = ipw.Label('')
 
+        # Cache the last full-resolution composite so save doesn't recompute it
+        cached = {'full_res_rgb': None}
+
         def refresh():
             status_html.value = '<p style="padding:10px 0">Generating full resolution image…</p>'
+            r, g, b = self.r_slider.value, self.g_slider.value, self.b_slider.value
+            cached['full_res_rgb'], _ = self._rgb_scaling(self.sc_raw_f, r, g, b)
             with full_res_output:
                 full_res_output.clear_output()
-                self._full_res_color_rgb(
-                    self.r_slider.value, self.g_slider.value, self.b_slider.value
-                )
+                self._full_res_color_rgb(r, g, b, cached['full_res_rgb'])
             status_html.value = ''
+
+        def _reset_save_button():
+            save_button.description = 'Save image'
+            save_button.button_style = 'success'
+            save_status_label.value = ''
 
         def on_save(b):
             suffix = filename_input.value
             filename = f'full_res_color_{self.object_name}{suffix}.png'
-            comb, _ = self._rgb_scaling(
-                self.sc_raw_f, self.r_slider.value, self.g_slider.value, self.b_slider.value
-            )
-            mimg.imsave(filename, comb)
-            save_status_label.value = f'Saved: {filename}'
 
+            # If file exists and we haven't yet confirmed, ask for confirmation
+            if os.path.exists(filename) and save_button.button_style != 'danger':
+                save_button.description = 'Overwrite?'
+                save_button.button_style = 'danger'
+                save_status_label.value = f'{filename} already exists. Click again to overwrite.'
+                return
+
+            mimg.imsave(filename, cached['full_res_rgb'])
+            save_status_label.value = f'Saved: {filename}'
+            _reset_save_button()
+
+        # Reset confirmation state when the filename changes
+        filename_input.observe(lambda change: _reset_save_button(), names='value')
         save_button.on_click(on_save)
 
         widget = ipw.VBox([
@@ -267,11 +283,13 @@ class ColorImageMaker:
             ax.imshow(comb, vmin=0, vmax=1)
             plt.show()
 
-    def _full_res_color_rgb(self, r=0.5, g=0.5, b=0.5):
-        comb, maxes = self._rgb_scaling(self.sc_raw_f, r, g, b)
+    def _full_res_color_rgb(self, r=0.5, g=0.5, b=0.5, comb=None):
+        if comb is None:
+            comb, _ = self._rgb_scaling(self.sc_raw_f, r, g, b)
         fig, ax = plt.subplots(figsize=(20, 20))
         max_img = np.nanmax(comb.flatten())
         min_img = np.nanmin(comb.flatten())
+        maxes = [np.nanmax(comb[:, :, i]) for i in range(3)]
         ax.set_title(f'{max_img=:.3f} {min_img=:.3f} {r=:.2f} {g=:.2f} {b=:.2f}\n{maxes=}')
         ax.tick_params(labelbottom=False, labelleft=False, labelright=False, labeltop=False)
         ax.imshow(comb, vmin=0, vmax=1)
