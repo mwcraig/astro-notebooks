@@ -27,6 +27,7 @@ classifiers = [
 dependencies = [
   "jupyter-app-launcher",
   "stellarphot",
+  "photutils",
 ]
 
 [project.urls]
