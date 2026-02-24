@@ -29,7 +29,7 @@ class ColorImageMaker:
     _colors = ['red', 'green', 'blue']
 
     def __init__(self, image_directory):
-        self.image_directory = image_directory
+        self._image_directory = image_directory
         self.object_name = ''
 
         # Data storage
@@ -44,6 +44,19 @@ class ColorImageMaker:
 
         self._build_widgets()
         self._load_data()
+
+    @property
+    def image_directory(self):
+        return self._image_directory
+
+    @image_directory.setter
+    def image_directory(self, value):
+        self._image_directory = value
+        # Reload data if widgets have already been built
+        if hasattr(self, 'image_widgets'):
+            self.bkgd_sm = {}
+            self.bkgd_f = {}
+            self._load_data()
 
     # ------------------------------------------------------------------
     # Widget construction
