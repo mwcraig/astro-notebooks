@@ -28,6 +28,13 @@ dependencies = [
   "jupyter-app-launcher",
   "stellarphot",
   "photutils",
+  "Pillow",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest",
+  "pytest-astropy",
 ]
 
 [project.urls]
@@ -61,6 +68,12 @@ extra-dependencies = [
 [tool.hatch.envs.types.scripts]
 check = "mypy --install-types --non-interactive {args:src/astro_notebooks tests}"
 
+[tool.hatch.envs.test]
+features = ["test"]
+
+[tool.hatch.envs.test.scripts]
+test = "pytest {args:tests}"
+
 [tool.coverage.run]
 source_pkgs = ["astro_notebooks", "tests"]
 branch = true
@@ -79,3 +92,6 @@ exclude_lines = [
   "if __name__ == .__main__.:",
   "if TYPE_CHECKING:",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,19 +1,45 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import ipywidgets as ipw
 import numpy as np
 
+from astropy.io import fits
 from astropy.nddata import block_reduce
 from astropy.visualization import simple_norm
 from ccdproc import ImageFileCollection
-import matplotlib.image as mimg
+from IPython.display import display
+from PIL import Image
+
+try:
+    from stellarphot.gui.custom_widgets import Spinner
+except Exception:
+    # stellarphot's GUI extras may be missing or incompatible; fall back to
+    # a message-only stand-in with the same start/stop interface.
+    Spinner = None
 
 
-def _scale_and_downsample(data, downsample=4,
+class _MessageSpinner(ipw.VBox):
+    """Fallback for stellarphot's Spinner when it cannot be imported."""
+
+    def __init__(self, *args, message="", **kwargs):
+        super().__init__(*args, **kwargs)
+        self._message = ipw.HTML(message)
+        self.children = [self._message]
+        self.layout.display = "none"
+
+    def start(self):
+        self.layout.display = "flex"
+
+    def stop(self):
+        self.layout.display = "none"
+
+
+def _scale_and_downsample(data, downsample=8,
                          min_percent=20,
                          max_percent=99.5):
 
-    scaled_data = data
+    scaled_data = data.copy()
     scaled_data[scaled_data > 1e5] = 1e5
     if downsample > 1:
         scaled_data = block_reduce(scaled_data,
@@ -28,6 +54,17 @@ def _scale_and_downsample(data, downsample=4,
     normed_data[np.isnan(normed_data)] = 0
 
     return normed_data
+
+
+def _make_one_thumbnail(fits_path, dest_path, downsample):
+    """Make a single uint8 grayscale PNG thumbnail for a FITS image.
+
+    Runs in a worker thread; the FITS read, numpy work and PNG encode all
+    release the GIL for most of their run time.
+    """
+    data = fits.getdata(fits_path)
+    scaled = _scale_and_downsample(data, downsample=downsample)
+    Image.fromarray((scaled * 255).astype(np.uint8), mode="L").save(dest_path)
 
 
 class ImageWithSelector(ipw.VBox):
@@ -66,9 +103,11 @@ class ImageWithSelector(ipw.VBox):
 
 
 class ImageSelect(ipw.VBox):
-    def __init__(self, *args, directory=".", **kwargs):
+    def __init__(self, *args, directory=".", downsample=8, max_workers=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.path = Path(directory)
+        self._downsample = downsample
+        self._max_workers = max_workers
         self._collection = ImageFileCollection(self.path)
         self._move_rejects = ipw.Button(description='Move rejects')
 
@@ -82,21 +121,47 @@ class ImageSelect(ipw.VBox):
         # self.layout.overflow = "scroll hidden"
         self._move_rejects.on_click(self._move_rejects_clicked)
 
-    def make_thumbnails(self, format="png", thumb_dir="thumbs"):
+    def make_thumbnails(self, thumb_dir="thumbs"):
         self._images = []
         thumby = Path(thumb_dir)
         thumby.mkdir(exist_ok=True)
         self._collection.refresh()
         self._im_base_bames = []
-        for data, fname in self._collection.data(return_fname=True):
+        todo = []
+        for fname in self._collection.files_filtered(include_path=True):
             base = Path(fname).stem
             self._im_base_bames.append(base)
-            dest_path = thumby / (base + f'.{format}')
+            dest_path = thumby / (base + '.png')
             if dest_path.exists():
                 continue
-            scaled_data = _scale_and_downsample(data)
+            todo.append((Path(fname), dest_path))
 
-            mimg.imsave(dest_path, scaled_data, cmap="gray")
+        if not todo:
+            return
+
+        spinner_cls = Spinner if Spinner is not None else _MessageSpinner
+        spinner = spinner_cls(message="Generating image thumbnails...")
+        progress = ipw.IntProgress(
+            value=0, min=0, max=len(todo), description="Thumbnails"
+        )
+        progress_box = ipw.VBox(children=[spinner, progress])
+        # Display right away so the user sees activity while the rest of
+        # the widget is still being constructed.
+        display(progress_box)
+        spinner.start()
+
+        try:
+            with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
+                futures = [
+                    executor.submit(_make_one_thumbnail, src, dest, self._downsample)
+                    for src, dest in todo
+                ]
+                for future in as_completed(futures):
+                    future.result()
+                    progress.value += 1
+        finally:
+            spinner.stop()
+            progress_box.layout.display = "none"
 
     def make_selectors(self, thumb_dir="thumbs"):
         kiddos = []
