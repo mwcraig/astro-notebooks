@@ -109,9 +109,9 @@ def test_parallel_matches_serial(fits_dir):
         assert np.array_equal(serial[k], parallel[k])
 
 
-def test_progress_ui_shown_and_hidden(fits_dir, monkeypatch):
+def test_progress_ui_shown_and_hidden(fits_dir, mocker):
     displayed = []
-    monkeypatch.setattr("astro_notebooks.image_selector.display", lambda *a, **k: displayed.extend(a))
+    mocker.patch("astro_notebooks.image_selector.display", side_effect=lambda *a, **k: displayed.extend(a))
     ImageSelect(directory=fits_dir)
     assert len(displayed) == 1
     progress_widgets = [w for w in _walk_widgets(displayed[0]) if isinstance(w, ipw.IntProgress)]
@@ -121,10 +121,10 @@ def test_progress_ui_shown_and_hidden(fits_dir, monkeypatch):
     assert displayed[0].layout.display == "none"
 
 
-def test_no_progress_display_when_cached(fits_dir, monkeypatch):
+def test_no_progress_display_when_cached(fits_dir, mocker):
     ImageSelect(directory=fits_dir)
     displayed = []
-    monkeypatch.setattr("astro_notebooks.image_selector.display", lambda *a, **k: displayed.extend(a))
+    mocker.patch("astro_notebooks.image_selector.display", side_effect=lambda *a, **k: displayed.extend(a))
     ImageSelect(directory=fits_dir)
     assert displayed == []
 

@@ -121,7 +121,7 @@ class ImageSelect(ipw.VBox):
         # self.layout.overflow = "scroll hidden"
         self._move_rejects.on_click(self._move_rejects_clicked)
 
-    def make_thumbnails(self, format="png", thumb_dir="thumbs"):
+    def make_thumbnails(self, thumb_dir="thumbs"):
         self._images = []
         thumby = Path(thumb_dir)
         thumby.mkdir(exist_ok=True)
@@ -131,7 +131,7 @@ class ImageSelect(ipw.VBox):
         for fname in self._collection.files_filtered(include_path=True):
             base = Path(fname).stem
             self._im_base_bames.append(base)
-            dest_path = thumby / (base + f'.{format}')
+            dest_path = thumby / (base + '.png')
             if dest_path.exists():
                 continue
             todo.append((Path(fname), dest_path))
@@ -150,17 +150,18 @@ class ImageSelect(ipw.VBox):
         display(progress_box)
         spinner.start()
 
-        with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
-            futures = [
-                executor.submit(_make_one_thumbnail, src, dest, self._downsample)
-                for src, dest in todo
-            ]
-            for future in as_completed(futures):
-                future.result()
-                progress.value += 1
-
-        spinner.stop()
-        progress_box.layout.display = "none"
+        try:
+            with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
+                futures = [
+                    executor.submit(_make_one_thumbnail, src, dest, self._downsample)
+                    for src, dest in todo
+                ]
+                for future in as_completed(futures):
+                    future.result()
+                    progress.value += 1
+        finally:
+            spinner.stop()
+            progress_box.layout.display = "none"
 
     def make_selectors(self, thumb_dir="thumbs"):
         kiddos = []
