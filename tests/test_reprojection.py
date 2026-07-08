@@ -41,6 +41,8 @@ def test_output_dtype_float32(ccd_offset, wcs_ref):
     result = reproject_to_reference(ccd_offset, wcs_ref, SHAPE)
     assert result.data.dtype == np.float32
     assert isinstance(result, CCDData)
+    # BITPIX is what actually lands on disk; -32 is FITS for 32-bit float.
+    assert result.to_hdu()[0].header["BITPIX"] == -32
 
 
 def test_output_shape_matches_shape_out(ccd_offset, wcs_ref):
@@ -82,7 +84,13 @@ def test_identity_reprojection_preserves_values(wcs_ref):
     result = reproject_to_reference(ccd, wcs_ref, SHAPE, subtract_median=False)
     finite = np.isfinite(result.data)
     assert finite.sum() >= 0.99 * result.data.size
-    np.testing.assert_allclose(result.data[finite], ccd.data.astype(np.float32)[finite], rtol=1e-5)
+    expected = ccd.data.astype(np.float32)[finite]
+    np.testing.assert_allclose(result.data[finite], expected, rtol=1e-5)
+    # Also bound the worst-case absolute error: unlike the other tests, this
+    # compares against the original input, so it is the one ground-truth
+    # anchor that would catch a systematic shift/scale in the reproject path.
+    max_abs_diff = np.max(np.abs(result.data[finite] - expected))
+    assert max_abs_diff < 1e-2
 
 
 def test_nan_outside_footprint(ccd_offset, wcs_ref):

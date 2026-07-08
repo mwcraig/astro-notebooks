@@ -4,7 +4,7 @@ from reproject import reproject_interp
 
 
 def reproject_to_reference(ccd, wcs_ref, shape_out, order=1,
-                           subtract_median=True, block_size=(1024, 1024)):
+                           subtract_median=True, block_size=(512, 512)):
     """
     Reproject an image onto a reference WCS, returning a float32 result.
 
@@ -44,5 +44,10 @@ def reproject_to_reference(ccd, wcs_ref, shape_out, order=1,
                                    order=order, roundtrip_coords=False,
                                    block_size=block_size)
 
-    return CCDData((new_data - median).astype(np.float32),
-                   wcs=wcs_ref, unit=ccd.unit, meta=ccd.meta)
+    # Cast to float32 first, then subtract in place, so we never allocate a
+    # full-frame float64 temporary (reproject_interp returns float64) and skip
+    # the subtraction pass entirely when it is disabled.
+    result = new_data.astype(np.float32)
+    if subtract_median:
+        result -= median
+    return CCDData(result, wcs=wcs_ref, unit=ccd.unit, meta=ccd.meta)
